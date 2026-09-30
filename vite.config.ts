@@ -3,4 +3,14 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   plugins: [react()],
+  server: {
+    headers: {
+      'Cache-Control': 'no-store',
+    },
+  },
+  preview: {
+    headers: {
+      'Cache-Control': 'no-store',
+    },
+  },
 });

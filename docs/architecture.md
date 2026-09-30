@@ -1,6 +1,6 @@
 # Architecture
 
-System design for the ASCII & Braille Art Generator: how the pieces fit, how work is scheduled, and why the main decisions were made.
+System design for the ASCII & Braille Art Generator. Diagrams and normalized interfaces on this page describe the target architecture unless labeled current. See [milestones.md](milestones.md) for implementation progress.
 
 ## Contents
 
@@ -18,14 +18,14 @@ System design for the ASCII & Braille Art Generator: how the pieces fit, how wor
 ## Principles
 
 1. **Client-only compute.** Decoding, conversion, and export all run in the browser. Vercel serves static files.
-2. **Pure core, thin shell.** Algorithms live in `src/core/` with no DOM or framework dependency. UI, workers, and I/O adapters wrap them.
-3. **Off the main thread.** Heavy work runs in Web Workers so controls stay responsive.
-4. **Lazy loading.** The HEIC decoder, FIGlet fonts, and export helpers load only when used.
+2. **Pure core, thin shell (target).** Image algorithms are mostly independent. Current text helpers under `src/core/text/` use DOM APIs and import state types; move those dependencies to adapters as the text path is completed.
+3. **Off the main thread (target).** Image processing has a worker; raster text currently runs on the main thread.
+4. **Lazy loading (target).** FIGlet font files are fetched on demand. The HEIC fallback and export helpers do not yet exist.
 5. **Deterministic output.** The same input and settings always produce the same text. This makes snapshot testing possible.
 
 ## System context
 
-The diagram below shows the target flow for the planned HEIC fallback and transfer-once optimization; the current implementation uses the simpler `ImageData → process` path described above.
+The diagram below shows the intended deployment context, including an optional future image proxy. The HEIC fallback and transfer-once optimization are not implemented.
 
 ```mermaid
 flowchart LR
@@ -80,7 +80,7 @@ flowchart TB
 | Workers | Off-thread decode and conversion | Core |
 | Core | All algorithms | Nothing outside itself |
 
-Dependencies point downward only. `core` never imports from `ui`, `state`, `io`, or `workers`.
+The diagram expresses the dependency goal. Most image algorithms follow it, but current text helpers under `src/core/text/` import state types and browser APIs. The HEIC worker and export formatters shown here are planned.
 
 ## Technology stack
 
@@ -93,7 +93,7 @@ This document describes the current scaffold and planned extension points. Rows 
 | UI | React | Many interdependent controls |
 | Styling | CSS Modules | Scoped, no runtime cost |
 | HEIC | Native browser decoding | Fallback `libheif-js` worker is planned |
-| FIGlet | UI placeholder | Text rendering integration is planned |
+| FIGlet | Local fonts, picker, and direct render path | Build and browser verification remain |
 | Unit tests | Planned Vitest harness | No test dependency is installed yet |
 | E2E tests | Planned Playwright harness | No browser test script is installed yet |
 | Hosting and CI | Vercel-ready, CI planned | No `vercel.json` or workflow is committed |
@@ -140,9 +140,11 @@ The tree below is a target layout for planned text, HEIC, tests, and export modu
 | **Pipeline worker** | Receives pixel data and settings, resamples, applies tone, dithers, and renders ASCII/Braille output |
 | **Future workers** | HEIC fallback and text/export work may move off-thread when those features are implemented |
 
-**Current message flow.** The main thread decodes an image to `ImageData` and sends the pixel buffer plus current settings to the pipeline worker for each processing request. The worker returns rendered art, dimensions, and status. Transfer-once caching is a planned optimization, not the current contract.
+**Current message flow (broken).** The main thread decodes an image and creates a transferable pixel-buffer copy, but `src/app/App.tsx` does not include `imageData` in the posted payload. The worker expects that field, so this path must be repaired before image conversion is considered functional. Transfer-once caching is a later optimization.
 
-**Latest-wins scheduling.** Setting changes are debounced (about 60–100 ms) and tagged with an increasing request ID. The UI applies a result only if its ID is the newest. During a slider drag, a smaller preview may render first, followed by a full-quality render when the drag ends.
+**Latest-wins scheduling (target).** The current code has no request ID or debounce. Its processing callback depends on the entire state object, so rerenders can dispatch additional work. Add stable scheduling and discard stale results before claiming responsive rendering.
+
+The sequence diagram below is the **target** flow, not the current worker protocol.
 
 ```mermaid
 sequenceDiagram
@@ -224,7 +226,7 @@ Text-mode settings are in [text-mode.md](text-mode.md#settings).
 
 ## Error handling
 
-Decoding and conversion errors are mapped to a small set of typed errors so the UI can show plain messages without exposing internals.
+The following typed errors and user messages are the **target** contract. The current app mainly logs decode and worker failures to the console; it does not yet show these inline messages.
 
 | Error code | Cause | User message |
 |---|---|---|
@@ -243,7 +245,7 @@ Worker errors are reported to the console and clear the processing state. Typed 
 
 **Add a ramp preset.** Add the string to `src/core/ascii/index.ts`. Presets must be ordered lightest to darkest.
 
-**Add text rendering.** Add the rendering implementation and licensed assets under `src/` and `public/` only when text processing is wired. Document asset licensing before distribution.
+**Complete text rendering.** Correct the existing FIGlet/raster paths, verify both outputs, and document bundled font licenses before distribution.
 
 **Add an export format.** Add a pure formatter under `src/core/`, then wire the action in `src/ui/ExportPanel.tsx`.
 

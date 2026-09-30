@@ -1,0 +1,10 @@
+fix: Resolve DataCloneError in worker postMessage by copying image buffer before transfer
+
+- Modified dispatchProcess in App.tsx to create a copy of image data buffer before transferring to worker
+- This keeps original image data intact in main thread for reprocessing when settings change or switching modes
+- Worker already handles transferred ArrayBuffer correctly by converting to Uint8ClampedArray
+- Fixes "Failed to execute 'postMessage' on 'Worker': Data cannot be cloned, out of memory" error
+- Preserves all existing functionality including state preservation between Image/Text modes
+- Maintains FIGlet engine fix (wrap width applied to input, not output)
+- Keeps sample texts removed from controls
+- Preserves React warning fix (fetchpriority lowercase)

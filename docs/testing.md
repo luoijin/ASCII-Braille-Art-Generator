@@ -128,7 +128,7 @@ Targets (validate on representative hardware; these are goals, not guarantees):
 | Decode plus first render, 12 MP JPEG | 1.5 s or less |
 | Decode plus first render, 12 MP HEIC via WASM | 4 s or less, with visible progress |
 
-CI fails if the main bundle grows past its budget.
+The bundle budget is a target; there is currently no CI workflow or bundle-size gate.
 
 ## Running tests
 

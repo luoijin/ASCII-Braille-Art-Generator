@@ -18,10 +18,41 @@ Read [docs/architecture.md](docs/architecture.md) before making structural chang
 ## Workflow
 
 1. Open an issue for anything larger than a small fix, so the approach can be agreed first.
-2. Create a branch from `main`: `feature/<short-name>` or `fix/<short-name>`.
+2. Create a focused branch from the latest `main`, using one of the recommended names below when the work matches an assigned milestone.
 3. Make focused commits. Use plain, imperative messages ("Add Atkinson kernel", "Fix Braille edge padding").
 4. Run the checks below.
-5. Open a pull request. Include what changed, why, and how you tested it. For UI changes, add screenshots. Vercel preview builds apply only after the repository is connected to Vercel.
+5. Push the branch to a remote where you have write access and open a pull request targeting `upstream/main`. If Anne cannot push to Jan's `origin`, use her own fork as the PR head. Include what changed, why, and how you tested it. For UI changes, add screenshots. Vercel preview builds apply only after the repository is connected to Vercel.
+
+## Recommended task branches
+
+Keep `main` as the integration branch. Use one branch per focused pull request, and create each branch only when starting that task. These names match the assignments in [docs/milestones.md](docs/milestones.md); the feature IDs define the acceptance checks.
+
+### Phase 1 — Stable image generator
+
+| Branch | Owner | Assigned work |
+|---|---|---|
+| `fix/worker-pixel-transfer` | Jan | IN-01, RE-01, RE-03, RE-04; add worker input and image-render regression checks |
+| `fix/render-scheduling` | Jan | RE-02 |
+| `feat/image-rendering-controls` | Jan | RE-05–RE-27; add deterministic core regression tests for changed controls |
+| `feat/image-input-hardening` | Anne | IN-02–IN-08 |
+| `feat/responsive-accessibility` | Anne | UI-01–UI-13 and UI TypeScript fixes |
+| `chore/test-lint-ci` | Anne | ESLint setup, browser-test harness, and CI workflow |
+
+Merge `fix/worker-pixel-transfer` first because it unblocks the image acceptance checks. Add core regression tests in the matching Jan feature branches; use `chore/test-lint-ci` for the browser harness and automation. The overall typecheck/build gates need code fixes from both owners. When two branches touch shared files such as `src/app/App.tsx`, start the later branch from the updated `main` after the earlier pull request merges.
+
+### Later phases
+
+Create these when the corresponding phase starts; do not keep unused future branches open.
+
+| Branch | Owner | Assigned work |
+|---|---|---|
+| `feat/text-rendering` | Jan | TX-01–TX-15 |
+| `feat/export-actions` | Anne | EX-01–EX-10 |
+| `feat/heic-support` | Anne | IN-09–IN-10 |
+| `feat/advanced-rendering` | Jan | AD-01–AD-07 |
+| `feat/advanced-color-export` | Anne | AD-08–AD-14 |
+
+If a pull request grows beyond its listed scope, split it into another focused branch rather than combining unrelated phase work.
 
 ## Checks before opening a pull request
 

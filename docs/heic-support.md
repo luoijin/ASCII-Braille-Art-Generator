@@ -19,13 +19,13 @@ How the app reads HEIC and HEIF images, the format iPhones use for photos.
 
 **Current status:** HEIC handling is native-browser-only through `src/io/decode.ts`. The `loadHeicFile` helper is a placeholder that retries normal image loading and reports an unsupported-format error when that fails. The worker-based `libheif-js` fallback described below is planned, not present in this checkout.
 
-Safari and some system configurations can decode HEIC natively. Chrome and Firefox generally cannot. The app therefore:
+Safari and some system configurations can decode HEIC natively. Chrome and Firefox generally cannot. The **target** app flow is:
 
 1. Detects HEIC/HEIF files.
 2. Tries the browser's own decoder first.
 3. If that fails, loads a WebAssembly build of libheif (`libheif-js`) in a worker and decodes to raw RGBA pixels.
 
-The WebAssembly code is downloaded only when it is needed.
+The WebAssembly fallback is not bundled or downloaded in the current app.
 
 ## Detection
 
