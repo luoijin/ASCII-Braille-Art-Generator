@@ -38,6 +38,11 @@ export function ControlsPanel({ state, onFileSelected, onUrlLoad }: ControlsPane
 
   const hasContent = inputMode === 'image' ? hasImage : text.text.trim().length > 0;
 
+  // Character count for export panel (length of first line of output)
+  const charCount = state.outputArt.length > 0
+    ? state.outputArt.split('\n')[0].length
+    : 0;
+
   return (
     <div className={styles.panel} id="controls-panel">
       <div className={styles.header}>
@@ -88,7 +93,7 @@ export function ControlsPanel({ state, onFileSelected, onUrlLoad }: ControlsPane
             <ExportPanel
               outputMode={outputMode}
               hasContent={hasContent}
-              charCount={0}
+              charCount={charCount}
               onCopyArt={() => {}}
               onDiscord={() => {}}
               onFullWidth={() => {}}
@@ -113,7 +118,7 @@ export function ControlsPanel({ state, onFileSelected, onUrlLoad }: ControlsPane
             <ExportPanel
               outputMode={outputMode}
               hasContent={hasContent}
-              charCount={0}
+              charCount={charCount}
               onCopyArt={() => {}}
               onDiscord={() => {}}
               onFullWidth={() => {}}

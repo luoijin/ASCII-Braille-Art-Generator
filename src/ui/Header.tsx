@@ -46,10 +46,7 @@ export function Header({
           <a className={styles.link} href="#docs" onClick={event => scrollToSection(event, 'docs')}>
             Docs
           </a>
-          <a className={styles.link} href="https://github.com" target="_blank" rel="noreferrer">
-            GitHub
-            <ExternalLinkIcon size={11} className={styles.externalIcon} />
-          </a>
+          
         </div>
 
         <div className={styles.actions}>
@@ -65,7 +62,7 @@ export function Header({
           </button>
           <a
             className={styles.iconButton}
-            href="https://github.com"
+            href="https://github.com/luoijin/ASCII-Braille-Art-Generator"
             target="_blank"
             rel="noreferrer"
             aria-label="View source on GitHub"

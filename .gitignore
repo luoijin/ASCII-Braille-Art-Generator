@@ -44,3 +44,4 @@ blob-report/
 AGENTS.md
 .agents/
 skills-lock.json
+.claude/

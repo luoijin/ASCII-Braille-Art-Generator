@@ -43,7 +43,7 @@ export function HeroBackdrop() {
         className={styles.image}
         src="/ascii-braille-hero-bg.png"
         alt=""
-        fetchPriority="high"
+        fetchpriority="high"
       />
     </div>
   );

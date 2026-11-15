@@ -1,6 +1,6 @@
 # Text Mode
 
-How typed text becomes ASCII or Braille art. There are two engines and two outputs.
+Current implementation and intended behavior for typed text. There are two engines and two outputs. Track completion in [Phase 2](milestones.md).
 
 ## Contents
 
@@ -14,7 +14,7 @@ How typed text becomes ASCII or Braille art. There are two engines and two outpu
 
 ## Overview
 
-**Current status:** the Text controls and settings types are present, but the main app currently processes loaded images only. FIGlet/raster rendering, font assets, and text-to-Braille conversion in this document are the planned implementation contract.
+**Current status (2026-10-01):** the app has Text controls, bundled FIGlet fonts, and an asynchronous FIGlet-to-ASCII path. Raster text has canvas code, but its pixel-buffer types do not match the conversion function, and the production build fails. Neither engine has passed browser acceptance checks. Exports remain unimplemented. The flow and options below describe the target unless explicitly identified as current.
 
 | Engine | ASCII output | Braille output | Best for |
 |---|---|---|---|
@@ -33,11 +33,11 @@ flowchart TB
   R5 --> O
 ```
 
-Choosing Braille output selects the Raster engine automatically.
+Choosing Braille output selects the Raster engine in application state. This does not yet establish that text-to-Braille conversion works.
 
 ## FIGlet engine
 
-FIGlet fonts describe how each letter is drawn from characters. The app ships a large catalog and loads a font only when the user selects it.
+FIGlet fonts describe how each letter is drawn from characters. The app ships a large local catalog and fetches a font when rendering requests it. The direct FIGlet path exists in `src/app/App.tsx`, but build, layout, wrapping, and browser behavior remain to be verified.
 
 **Font files.** `.flf` files live in `public/fonts/figlet/`. A manifest, `figlet-fonts.json`, lists each font:
 
@@ -80,15 +80,15 @@ Check the exact `figlet` API (`parseFont`, promise-returning `text`) against the
 |---|---|
 | Font | Any font in the manifest |
 | Layout | default, full, fitted, controlled smushing, universal smushing |
-| Alignment | left, center, right |
+| Alignment | left, center, right; currently stored but not applied to direct FIGlet output |
 | Wrap width | Characters per line; long text wraps at word boundaries |
-| Gradient | Optional two-color gradient |
+| Gradient | Planned two-color gradient; the toggle does not color output yet |
 
 *Layout* controls how much neighboring letters are allowed to overlap. *Full* keeps full spacing; *smushing* modes merge touching parts.
 
 ## Raster engine
 
-The raster engine draws the text to a canvas, then feeds the pixels into the same pipeline used for images. This is what allows shaded lettering, outlines, shadows, and Braille.
+The intended raster engine draws text to a canvas and feeds its pixels into the image pipeline. The current `rasterizeText` helper exists, but `textToBitmap.ts` returns an `ImageData` object where the converter requires a `Uint8ClampedArray`. Its import path also fails TypeScript resolution. Fix and verify this path before treating raster ASCII or Braille as supported. Outline and shadow are future effects.
 
 ```ts
 // src/core/text/rasterText.ts
@@ -142,13 +142,13 @@ export async function rasterizeText(o: RasterTextOptions): Promise<RasterImage> 
 | Outline | Stroke drawn around glyphs before conversion |
 | Shadow | Offset, blurred copy behind the text |
 
-**Why main thread.** Fonts are loaded on the main thread, so rasterization happens there. The resulting buffer is transferred to the pipeline worker.
+**Threading.** Rasterization currently runs on the main thread and calls the bitmap processor there. Transferring the resulting buffer to the pipeline worker is a target improvement.
 
-**Fonts.** A curated set of open-license fonts is self-hosted under `public/fonts/ui/` and loaded with the `FontFace` API. Self-hosting keeps the app free of third-party requests.
+**Fonts.** The picker currently names Inter, IBM Plex Mono, and Playfair Display, but there is no `public/fonts/ui/` bundle or `FontFace` loading path. A verified, licensed local font set is still needed.
 
 ## Text to Braille
 
-Text goes through the Raster engine, then through the Braille pipeline described in [processing.md](processing.md#braille-engine).
+The target path sends rasterized text through the Braille pipeline described in [processing.md](processing.md#braille-engine). The current raster buffer mismatch blocks a verified result.
 
 Braille text stays legible at small sizes. Each character carries a 2×4 dot grid, so lettering that needs 30 or more columns as FIGlet output can fit in a fraction of that.
 
@@ -165,7 +165,7 @@ Multi-line text is laid out on one canvas and converted as one image, so line sp
 
 ## Gradients
 
-A two-color linear gradient (horizontal or vertical) is applied by interpolating color across the output. It appears in the preview and PNG export. Plain-text exports do not contain color.
+A two-color linear gradient is planned for the preview and PNG export. The current toggle and direction selector do not color output; the color values are stored in state but not connected to rendering. Plain-text exports cannot contain color.
 
 ## Fonts and licensing
 
@@ -174,6 +174,8 @@ A two-color linear gradient (horizontal or vertical) is applied by interpolating
 - Do not load fonts from third-party CDNs.
 
 ## Settings
+
+The type below is a **target model**, not the current `TextSettings` interface. The implemented settings are in `src/state/types.ts`; reconcile them when completing Phase 2.
 
 ```ts
 export type TextSettings =

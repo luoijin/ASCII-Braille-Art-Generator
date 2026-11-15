@@ -1,6 +1,6 @@
 # Processing
 
-How an image becomes ASCII or Braille output. Everything here lives in `src/core/` and is pure, DOM-free TypeScript.
+How image pixels are intended to become ASCII or Braille output. The image algorithms are in `src/core/` and are mirrored in `src/workers/pipeline.worker.ts`. Some sections below describe planned behavior; the [milestone tracker](milestones.md) records what remains.
 
 ## Contents
 
@@ -18,7 +18,7 @@ How an image becomes ASCII or Braille output. Everything here lives in `src/core
 
 ## Pipeline
 
-The current worker implements the image path: decode on the main thread, send `ImageData` plus settings to `src/workers/pipeline.worker.ts`, then render ASCII or Braille output. Text rasterization, color export, and transfer-once worker caching described in later sections are extension points rather than shipped behavior.
+The browser currently decodes an image on the main thread and the app attempts to send pixels and settings to `src/workers/pipeline.worker.ts`. The message omits the required `imageData` field, so the image path is blocked until the worker handoff is repaired. The chart shows the intended processing stages; optional edge detection and color output are not implemented.
 
 ```mermaid
 flowchart LR
@@ -33,13 +33,13 @@ flowchart LR
   K --> L
 ```
 
-The worker caches the output of the resample step. Changing brightness, contrast, dithering, or ramp only re-runs the steps after it.
+The worker does not cache a loaded image or resampled output. Reprocessing currently sends a new pixel-buffer copy for each request. Transfer-once caching is a later optimization.
 
 ## Grid sizing
 
 The user sets output **columns**. Rows come from the image shape and the character shape.
 
-`cellAspect` is the width of one character divided by the height of one line. It is measured at runtime (`measureText('M').width` against the font size times line height). Typical monospace fonts give about 0.5.
+`cellAspect` is the width of one character divided by the height of one line. The current worker uses a fixed value of `0.5` for ASCII; runtime font measurement is planned.
 
 | Mode | Grid | Formula |
 |---|---|---|
@@ -50,11 +50,11 @@ With a cell aspect near 1:2, each Braille dot is close to square, so no extra co
 
 ## Resampling
 
-Large photos are reduced to the grid with an **area-average (box) filter** implemented in the worker. Each output sample is the mean of the source pixels it covers. This avoids the aliasing that browser canvas downscaling can produce at large reduction ratios, and it gives the same result on every browser.
+The worker has an area-average resize helper for images over its 4096 px longest-side cap. Its final character-grid sampling currently uses nearest-source-pixel lookup. Area-average grid sampling is a target improvement.
 
-Before this step the source is already capped to 4096 px on its longest side (see [heic-support.md](heic-support.md#limits)).
+The 4096 px cap is applied inside the worker, after the browser has decoded the full image. The planned pre-decode limits in [heic-support.md](heic-support.md#limits) are not enforced yet.
 
-**Alpha.** Transparent pixels are composited over the chosen background before luminance is computed: black for light-on-dark output, white for dark-on-light.
+**Alpha.** Transparent pixels are composited over a background chosen from the current light/dark theme before luminance is computed. A separate background selector is not implemented.
 
 ## Color space and tone
 
@@ -70,8 +70,8 @@ Why linear: printed dots and glyph ink average by area in linear light. Ditherin
 ## ASCII engine
 
 1. **Ramp.** A preset or a custom string, lightest to darkest.
-2. **Calibration** (optional). Each candidate glyph is drawn on a canvas in the active font at a large size. Its inked-pixel fraction is its density. Densities are normalized to `[0, 1]`, sorted, and near-duplicates are dropped. The result is an array of *target intensities* cached per font and character set. This runs on the main thread because the font must be loaded there.
-3. **Quantization.** Each pixel is matched to the *nearest target intensity*, not to evenly spaced levels. Real glyph densities are uneven, so this is the main reason calibrated output shades more smoothly.
+2. **Calibration (planned).** Measuring and caching each glyph's ink density is not yet connected to the renderer; the visible toggle has no effect.
+3. **Quantization.** The current renderer selects the nearest of evenly spaced ramp levels. Measured glyph-density targets are a later improvement.
 4. **Dithering.** The quantization error (`value − chosenTarget`) is passed to the selected dithering method.
 5. **Character mapping.** The chosen target index picks the glyph.
 
@@ -92,7 +92,7 @@ Dot *n* has bit value `1 << (n − 1)`. Dots 1, 2, 3, 7 form the left column, to
 **Dither first, pack second.** Each dot is on or off, so tone comes from dot density. The dot grid (`2·cols × 4·rows`) is dithered to 1 bit as a whole, then packed. Dithering per cell would stop error from crossing cell boundaries and produce visible tiling.
 
 ```ts
-// src/core/braille/bitmap.ts
+// src/core/braille/index.ts (illustrative excerpt)
 const DOT_BITS = [
   [0x01, 0x08],
   [0x02, 0x10],
@@ -193,15 +193,17 @@ export function diffuse(
 | Sierra Lite | 4 | (1,0,2) (−1,1,1) (0,1,1) | Fast, light |
 | Burkes | 32 | (1,0,8) (2,0,4) (−2,1,2) (−1,1,4) (0,1,8) (1,1,4) (2,1,2) | Smooth |
 
-**Ordered dithering.** Each pixel is compared to a tiled Bayer matrix (2×2, 4×4, or 8×8) scaled to the spacing between target levels. It has no error state, so results are stable and each pixel can be computed independently.
+Floyd–Steinberg and Atkinson are the two distinct algorithms currently selected by the image and raster-text processors. Sierra Lite and Burkes have kernel definitions but are not exposed as working options.
 
-**Blue noise.** Same as ordered, but the threshold texture is a precomputed blue-noise tile, which avoids visible repeating structure.
+**Ordered dithering (planned).** A tiled Bayer matrix (2×2, 4×4, or 8×8) would provide a stable threshold texture. The current renderer does not use the selected matrix.
+
+**Blue noise (planned).** A fixed blue-noise tile would avoid visible repeating structure. The current blue-noise and custom selections fall back to Floyd–Steinberg.
 
 **Strength** scales the propagated error (0–1). **Serpentine** scanning alternates direction each row to reduce streaking.
 
 ## Automatic threshold
 
-Used for Braille (and ASCII) when dithering is off and **Auto** is selected. Otsu's method:
+Currently used for Braille when dithering is off and **Auto** is selected. The ASCII path does not consume the displayed threshold setting. Otsu's method:
 
 1. Build a 256-bin histogram of luminance (after tone adjustments, converted back to 8-bit).
 2. For each candidate threshold `t`, split the histogram into a dark class and a light class.
@@ -209,7 +211,7 @@ Used for Braille (and ASCII) when dithering is off and **Auto** is selected. Ots
 
 ## Edge detection
 
-ASCII mode only.
+**Planned for ASCII mode.** The UI exposes edge detection and a threshold, but neither affects the current worker output.
 
 1. Apply the Sobel operator to the luminance grid to get horizontal and vertical gradients `Gx` and `Gy`.
 2. Magnitude is `sqrt(Gx² + Gy²)`; direction is `atan2(Gy, Gx)`.
@@ -217,11 +219,11 @@ ASCII mode only.
 
 ## Color output
 
-Color is computed on a separate grid: the mean RGB of the source pixels behind each cell (for Braille, the 2×4 block). To keep the DOM small:
+**Planned.** Color would be computed on a separate grid: the mean RGB of the source pixels behind each cell (for Braille, the 2×4 block). The current output is plain text, and the Source/Gradient controls do not supply per-character colors. To keep a future colored DOM small:
 
 - Adjacent cells with the same quantized color are merged into one `<span>`.
 - For large outputs, the canvas renderer is used instead of spans.
 
 ## Determinism
 
-Given the same pixels and settings, every function here returns the same result. There is no randomness (blue noise uses a fixed tile) and no dependence on the browser's canvas scaling. Snapshot tests rely on this (see [testing.md](testing.md)).
+The pure image algorithms are intended to return the same result for the same pixels and settings. A fixed tile is planned for blue noise. Golden and cross-browser tests are not yet installed; see [testing.md](testing.md).

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { OutputMode, TextSettings } from '../state/types';
 import { Segmented } from './controls/Segmented';
 import { SliderField } from './controls/SliderField';
@@ -12,8 +13,57 @@ interface TextControlsProps {
 
 /** Braille output requires the raster engine (see docs/text-mode.md#overview);
  * the engine switch is disabled in that case rather than hidden, so it's clear why. */
+
 export function TextControls({ outputMode, text, setText }: TextControlsProps) {
   const engineLocked = outputMode === 'braille';
+
+  const [fontManifest, setFontManifest] = useState<Array<{name: string; category: string; file: string; bytes: number}>>([]);
+  const [manifestLoaded, setManifestLoaded] = useState(false);
+  const [manifestError, setManifestError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Fetch the figlet font manifest
+    fetch('/fonts/figlet-fonts.json')
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`Failed to load font manifest: ${response.status}`);
+        }
+        return response.json();
+      })
+      .then(data => {
+        setFontManifest(data);
+        setManifestLoaded(true);
+        setManifestError(null);
+      })
+      .catch(error => {
+        console.warn('Could not load figlet font manifest, falling back to hardcoded fonts:', error);
+        setManifestLoaded(true); // still consider loaded so we can show fallback
+        setManifestError(error.message);
+      });
+  }, []);
+
+  // Fallback hardcoded font groups (used if manifest fails to load)
+  const hardcodedFontGroups = [
+    { label: 'Popular', fonts: ['Standard', 'Slant', 'Big'] },
+    { label: '3D and Shadow', fonts: ['ANSI Shadow'] },
+    { label: 'Bold and Block', fonts: ['Block'] },
+  ];
+
+  // Build font groups from manifest
+  const fontGroups = manifestLoaded
+    ? manifestError
+      ? hardcodedFontGroups // fallback on error
+      : Object.entries(
+          fontManifest.reduce((acc, font) => {
+            const category = font.category || 'All';
+            if (!acc[category]) {
+              acc[category] = [];
+            }
+            acc[category].push(font.name);
+            return acc;
+          }, {} as Record<string, string[]>)
+        ).map(([label, fonts]) => ({ label, fonts: fonts.sort() }))
+    : []; // empty while loading
 
   return (
     <>
@@ -34,6 +84,7 @@ export function TextControls({ outputMode, text, setText }: TextControlsProps) {
             padding: 8,
             fontFamily: 'var(--font-sans)',
             fontSize: 13,
+            marginTop: 8,
           }}
         />
       </section>
@@ -67,17 +118,29 @@ export function TextControls({ outputMode, text, setText }: TextControlsProps) {
               padding: 8,
             }}
           >
-            <optgroup label="Popular">
-              <option value="Standard">Standard</option>
-              <option value="Slant">Slant</option>
-              <option value="Big">Big</option>
-            </optgroup>
-            <optgroup label="3D and Shadow">
-              <option value="ANSI Shadow">ANSI Shadow</option>
-            </optgroup>
-            <optgroup label="Bold and Block">
-              <option value="Block">Block</option>
-            </optgroup>
+            {manifestLoaded && manifestError ? (
+              <optgroup label="Error loading fonts">
+                <option value="">Failed to load font list</option>
+              </optgroup>
+            ) : (
+              <>
+                {fontGroups.map(group => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.fonts.map(font => (
+                      <option key={font} value={font}>
+                        {font}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+                {/* If manifest is still loading, show a placeholder */}
+                {!manifestLoaded && (
+                  <optgroup label="Loading fonts...">
+                    <option value="" disabled>Loading...</option>
+                  </optgroup>
+                )}
+              </>
+            )}
           </select>
 
           <h3 className={styles.sectionLabel} style={{ marginTop: 12 }}>
@@ -156,8 +219,9 @@ export function TextControls({ outputMode, text, setText }: TextControlsProps) {
         <SliderField
           label="Wrap width"
           value={text.wrapWidth}
-          min={20}
+          min={0}
           max={200}
+          step={1}
           onChange={v => setText({ wrapWidth: v })}
         />
       </section>

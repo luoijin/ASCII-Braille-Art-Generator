@@ -103,17 +103,23 @@ self.onmessage = (e: MessageEvent) => {
           backgroundColor = { r: 0, g: 0, b: 0 }
         } = payload as ProcessPayload;
 
+        // Handle transferred buffer: if imageData is an ArrayBuffer, convert it to Uint8ClampedArray
+        // Otherwise, use it directly as a Uint8ClampedArray or Uint8Array
+        const processedImageData = imageData instanceof ArrayBuffer
+          ? new Uint8ClampedArray(imageData)
+          : imageData;
+
         // Step 1: Downscale image if larger than max dimensions (4096px)
         const MAX_DIMENSION = 4096;
         let resizedWidth = width;
         let resizedHeight = height;
-        let resizedData: Uint8Array | Uint8ClampedArray = imageData;
+        let resizedData: Uint8Array | Uint8ClampedArray = processedImageData;
 
         if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
           const scale = Math.min(MAX_DIMENSION / width, MAX_DIMENSION / height);
           resizedWidth = Math.max(1, Math.round(width * scale));
           resizedHeight = Math.max(1, Math.round(height * scale));
-          resizedData = areaAverageResize(imageData, width, height, resizedWidth, resizedHeight);
+          resizedData = areaAverageResize(processedImageData, width, height, resizedWidth, resizedHeight);
         }
 
         // Step 2: Convert to linear luminance with background compositing
